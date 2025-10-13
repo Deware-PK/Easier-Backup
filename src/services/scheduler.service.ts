@@ -8,7 +8,7 @@ import { CronExpressionParser } from 'cron-parser';
  */
 export function initializeScheduler() {
     // Scheduling every minute
-    cron.schedule('* * * * *', async () => {
+    cron.schedule('*/20 * * * * *', async () => {
         console.log('Scheduler running: Checking for tasks to execute...');
 
         try {

@@ -27,6 +27,6 @@ initializeScheduler();
 // API Router
 app.use(apiVersion, apiRouter);
 
-app.listen(port, () => {
+server.listen(port, () => {
     console.log(`Server has been started! (HTTP & WebSocket)`)
 });
