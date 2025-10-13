@@ -1,31 +1,41 @@
 import cron from 'node-cron';
 import prisma from '../db.js';
 import { sendCommandToAgent } from './websocket.service.js';
-import { CronExpressionParser } from 'cron-parser';
+import parser from 'cron-parser';
 
 /**
  * Initialize Scheduler
  */
 export function initializeScheduler() {
     // Scheduling every minute
-    cron.schedule('*/20 * * * * *', async () => {
-        console.log('Scheduler running: Checking for tasks to execute...');
+    cron.schedule('* * * * *', async () => {
+        const now = new Date();
+console.log(`\n⏰ Scheduler running at ${now.toLocaleString('th-TH', { timeZone: 'Asia/Bangkok' })}`);
 
         try {
             const activeTasks = await prisma.tasks.findMany({
                 where: { is_active: true },
             });
 
-            const now = new Date();
+            if (!activeTasks.length) {
+                console.log('   -> No active tasks to check.');
+                return;
+            }
 
             for (const task of activeTasks) {
                 //
                 try {
-                    const interval = CronExpressionParser.parse(task.schedule);
-                    const nextRun = interval.next().toDate();
 
+                    const options = {
+                        currentDate: now,
+                        tz: 'Asia/Bangkok', // <--- ระบุ Timezone ของคุณที่นี่
+                    };
+
+                    const interval = parser.CronExpressionParser.parse(task.schedule, options);
+                    const previousRun = interval.prev().toDate();
                     const oneMinuteAgo = new Date(now.getTime() - 60000);
-                    if (nextRun >= oneMinuteAgo && nextRun <= now) {
+
+                    if (previousRun >= oneMinuteAgo) {
                         
                         console.log(`Task ${task.id} (${task.name}) is due. Sending command...`);
 
