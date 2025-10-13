@@ -1,0 +1,78 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// --- DATABASE MODELS ---
+
+// Model for users and their roles
+model users {
+  id            BigInt      @id @default(autoincrement())
+  username      String      @unique @db.VarChar(50)
+  email         String      @unique @db.VarChar(255)
+  password_hash String      @db.VarChar(255)
+  role          String      @default("user") @db.VarChar(10) // 'user' or 'admin'
+  created_at    DateTime    @default(now()) @db.Timestamptz()
+
+  // Relation: A user can have many computers
+  computers     computers[]
+}
+
+// Model for registered client computers/agents
+model computers {
+  id            BigInt      @id @default(autoincrement())
+  user_id       BigInt
+  name          String      @db.VarChar(100)
+  os            String?     @db.VarChar(50) // Optional field
+  auth_token    String      @unique @db.VarChar(255)
+  status        String      @default("offline") @db.VarChar(10) // 'online' or 'offline'
+  last_seen_at  DateTime?   @db.Timestamptz()
+  registered_at DateTime    @default(now()) @db.Timestamptz()
+
+  // Relation: A computer belongs to one user
+  user          users       @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  // Relation: A computer can have many tasks
+  tasks         tasks[]
+}
+
+// Model for backup tasks/schedules
+model tasks {
+  id               BigInt        @id @default(autoincrement())
+  computer_id      BigInt
+  name             String        @db.VarChar(100)
+  source_path      String        @db.Text
+  destination_path String        @db.Text
+  schedule         String        @db.VarChar(50) // Cron expression
+  is_active        Boolean       @default(true)
+  created_at       DateTime      @default(now()) @db.Timestamptz()
+
+  // Relation: A task belongs to one computer
+  computer         computers     @relation(fields: [computer_id], references: [id], onDelete: Cascade)
+
+  // Relation: A task can have many backup jobs (history)
+  backup_jobs      backup_jobs[]
+}
+
+// Model for the history/log of each backup job execution
+model backup_jobs {
+  id           BigInt    @id @default(autoincrement())
+  task_id      BigInt
+  status       String    @db.VarChar(20) // 'running', 'success', 'failed'
+  started_at   DateTime  @default(now()) @db.Timestamptz()
+  completed_at DateTime? @db.Timestamptz() // Optional, filled when job is done
+  details      String?   @db.Text         // Optional, for storing error messages or logs
+
+  // Relation: A job belongs to one task
+  task         tasks     @relation(fields: [task_id], references: [id], onDelete: Cascade)
+}
