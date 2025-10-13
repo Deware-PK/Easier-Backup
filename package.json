@@ -15,15 +15,20 @@
   "dependencies": {
     "@prisma/client": "^6.17.1",
     "bcryptjs": "^3.0.2",
+    "cron-parser": "^5.4.0",
     "dotenv": "^17.2.3",
     "express": "^5.1.0",
-    "jsonwebtoken": "^9.0.2"
+    "jsonwebtoken": "^9.0.2",
+    "node-cron": "^4.2.1",
+    "ws": "^8.18.3"
   },
   "devDependencies": {
     "@types/bcrypt": "^6.0.0",
     "@types/express": "^5.0.3",
     "@types/jsonwebtoken": "^9.0.10",
     "@types/node": "^24.7.2",
+    "@types/node-cron": "^3.0.11",
+    "@types/ws": "^8.18.1",
     "nodemon": "^3.1.10",
     "prisma": "^6.17.1",
     "ts-node": "^10.9.2",

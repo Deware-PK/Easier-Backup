@@ -1,21 +1,32 @@
 import express from 'express';
+import http from 'http';
 import 'dotenv/config';
 
-// Import Routes
-import userRoutes from './api/routes/users.route.js';
+// Import services
+import { initializeWebSocket } from './services/websocket.service.js';
+import { initializeScheduler } from './services/scheduler.service.js';
 
-// Use Routes
-const apiVersion = '/api/v1';
-const userRouteBasePath = `${apiVersion}/users`;
+// Import Routes
+import apiRouter from './api/routes/index.js';
 
 // Properties
 const port = process.env.PORT || 3000;
 const app = express();
+const apiVersion = '/api/v1';
 
 // Setup
 app.use(express.json());
-app.use(userRouteBasePath, userRoutes);
+
+// HTTP Server
+const server = http.createServer(app);
+initializeWebSocket(server);
+
+// -- Start schuduling -- 
+initializeScheduler();
+
+// API Router
+app.use(apiVersion, apiRouter);
 
 app.listen(port, () => {
-    console.log(`Server has been started!`)
+    console.log(`Server has been started! (HTTP & WebSocket)`)
 });
