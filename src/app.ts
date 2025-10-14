@@ -21,12 +21,31 @@ app.use(express.json());
 const server = http.createServer(app);
 initializeWebSocket(server);
 
-// -- Start schuduling -- 
-initializeScheduler();
+// -- Start schuduling with synced time -- 
+function startSyncedScheduler() {
+    const now = new Date();
+    const seconds = now.getSeconds();
+
+    if (seconds === 0) {
+        console.log('Server synced to the minute. Initializing scheduler now.');
+        initializeScheduler();
+    } else {
+        const secondsToWait = 60 - seconds;
+        const delayInMs = secondsToWait * 1000;
+        
+        console.log(`Waiting ${secondsToWait} seconds to sync scheduler to the top of the minute...`);
+        
+        setTimeout(() => {
+            console.log('Server synced! Initializing scheduler at the top of the minute.');
+            initializeScheduler();
+        }, delayInMs);
+    }
+}
 
 // API Router
 app.use(apiVersion, apiRouter);
 
 server.listen(port, () => {
     console.log(`Server has been started! (HTTP & WebSocket)`)
+    startSyncedScheduler();
 });

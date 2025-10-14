@@ -10,7 +10,7 @@ export function initializeScheduler() {
     // Scheduling every minute
     cron.schedule('* * * * *', async () => {
         const now = new Date();
-console.log(`\n⏰ Scheduler running at ${now.toLocaleString('th-TH', { timeZone: 'Asia/Bangkok' })}`);
+        console.log(`\n⏰ Scheduler running at ${now.toLocaleString('th-TH', { timeZone: 'Asia/Bangkok' })}`);
 
         try {
             const activeTasks = await prisma.tasks.findMany({
