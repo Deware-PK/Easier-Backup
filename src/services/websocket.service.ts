@@ -42,14 +42,26 @@ export function initializeWebSocket(server: import('http').Server) {
 
                     if (jobId && (status === 'success' || status === 'failed')) {
                         console.log(`Job status update received for Job ID ${jobId}: ${status}`);
-                        await prisma.backup_jobs.update({
+                        const updatedJob = await prisma.backup_jobs.update({ // เก็บผลลัพธ์ไว้
                             where: { id: BigInt(jobId) },
-                            data: {
-                                status: status,
-                                completed_at: new Date(),
-                                details: details || null,
-                            }
+                            data: { status: status, completed_at: new Date(), details: details || null },
+                            include: { task: true } 
                         });
+
+                        
+                        if (updatedJob.task.discord_webhook_url) {
+                            let message = '';
+                            if (status === 'success') {
+                                message = updatedJob.task.notification_on_success || `✅ Backup task "${updatedJob.task.name}" completed successfully.`;
+                            } else {
+                                message = updatedJob.task.notification_on_failure || `❌ Backup task "${updatedJob.task.name}" failed.`;
+                                if (details) {
+                                    message += `\nError: ${details}`;
+                                }
+                            }
+                            
+                            console.log(`Sending Discord notification for Job ID ${jobId}`);
+                        }
                     }
 
                 }

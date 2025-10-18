@@ -12,9 +12,20 @@ export function initializeScheduler() {
         const now = new Date();
         console.log(`\n⏰ Scheduler running at ${now.toLocaleString('th-TH', { timeZone: 'Asia/Bangkok' })}`);
 
+        
         try {
+            // 👇 2. Include computer data
             const activeTasks = await prisma.tasks.findMany({
                 where: { is_active: true },
+                include: { 
+                    computer: { 
+                        select: {
+                            default_backup_keep_count: true,
+                            default_retry_attempts: true,
+                            default_retry_delay_seconds: true
+                        }
+                    } 
+                } 
             });
 
             if (!activeTasks.length) {
@@ -28,7 +39,7 @@ export function initializeScheduler() {
 
                     const options = {
                         currentDate: now,
-                        tz: 'Asia/Bangkok', // <--- ระบุ Timezone ของคุณที่นี่
+                        tz: 'Asia/Bangkok',
                     };
 
                     const interval = parser.CronExpressionParser.parse(task.schedule, options);
@@ -50,8 +61,14 @@ export function initializeScheduler() {
                             action: 'start-backup',
                             jobId: newJob.id.toString(),
                             sourceFile: task.source_path,
-                            destinationFolder: task.destination_path
+                            destinationBaseFolder: task.destination_path,
+                            keepCount: task.backup_keep_count ?? task.computer.default_backup_keep_count ?? 3, // ใส่ fallback สุดท้าย
+                            retryAttempts: task.retry_attempts ?? task.computer.default_retry_attempts ?? 3,
+                            retryDelay: task.retry_delay_seconds ?? task.computer.default_retry_delay_seconds ?? 5,
+                            folderPrefix: task.folder_prefix ?? 'backup_',
+                            timestampFormat: task.timestamp_format ?? '%Y%m%d_%H%M%S'
                         };
+                        
                         sendCommandToAgent(task.computer_id.toString(), command);
                     }
                 } catch (err) {

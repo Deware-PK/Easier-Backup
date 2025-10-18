@@ -8,7 +8,7 @@ import { generateAgentToken } from '../../services/token.service.js';
  * @route POST /api/v1/computers
  */
 export const registerComputer = async (req: AuthRequest, res: Response) => {
-    const { name, os } = req.body;
+    const { name, os, default_backup_keep_count, default_retry_attempts, default_retry_delay_seconds } = req.body;
     const userId = req.user?.sub;
 
     if (!name) {
@@ -27,6 +27,10 @@ export const registerComputer = async (req: AuthRequest, res: Response) => {
                 os: os || 'Unknown',
                 user_id: BigInt(userId),
                 auth_token: agentToken,
+                // New fields
+                default_backup_keep_count: default_backup_keep_count ? parseInt(default_backup_keep_count) : undefined,
+                default_retry_attempts: default_retry_attempts ? parseInt(default_retry_attempts) : undefined,
+                default_retry_delay_seconds: default_retry_delay_seconds ? parseInt(default_retry_delay_seconds) : undefined,
             }
         });
 
@@ -59,18 +63,22 @@ export const getUserComputers = async (req: AuthRequest, res: Response) => {
 
     try {
         const computers = await prisma.computers.findMany({
-            where: {
-                user_id: BigInt(userId),
-            },
-
-            include: {
-                _count: {
-                    select: { tasks: true }
+            where: { user_id: BigInt(userId) },
+            // 👇 แก้ไขตรงนี้: ใช้ select อย่างเดียว แล้วใส่ _count เข้าไปใน select
+            select: {
+                id: true,
+                name: true,
+                os: true,
+                status: true,
+                last_seen_at: true,
+                default_backup_keep_count: true,
+                default_retry_attempts: true,
+                default_retry_delay_seconds: true,
+                _count: { // 👈 _count สามารถอยู่ใน select ได้เลย
+                    select: { tasks: true } 
                 }
             },
-            orderBy: {
-                registered_at: 'asc'
-            }
+            orderBy: { registered_at: 'asc' }
         });
 
         const formattedComputers = computers.map(computer => ({
@@ -79,7 +87,10 @@ export const getUserComputers = async (req: AuthRequest, res: Response) => {
             os: computer.os,
             status: computer.status,
             last_seen_at: computer.last_seen_at,
-            taskCount: computer._count.tasks
+            taskCount: computer._count.tasks,
+            default_backup_keep_count: computer.default_backup_keep_count,
+            default_retry_attempts: computer.default_retry_attempts,
+            default_retry_delay_seconds: computer.default_retry_delay_seconds,
         }));
 
         res.status(200).json(formattedComputers);

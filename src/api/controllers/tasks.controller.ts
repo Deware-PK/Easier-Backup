@@ -7,7 +7,11 @@ import prisma from '../../db.js';
  * @route POST /api/v1/tasks
  */
 export const createTask = async (req: AuthRequest, res: Response) => {
-    const { computer_id, name, source_path, destination_path, schedule } = req.body;
+    const { computer_id, name, source_path, destination_path, schedule, 
+            backup_keep_count, retry_attempts, retry_delay_seconds,
+            folder_prefix, timestamp_format,
+            discord_webhook_url, notification_on_success, notification_on_failure
+          } = req.body;
     const userId = req.user?.sub;
 
     if (!computer_id || !name || !source_path || !destination_path || !schedule) {
@@ -33,6 +37,14 @@ export const createTask = async (req: AuthRequest, res: Response) => {
                 source_path,
                 destination_path,
                 schedule,
+                backup_keep_count: backup_keep_count ? parseInt(backup_keep_count) : undefined,
+                retry_attempts: retry_attempts ? parseInt(retry_attempts) : undefined,
+                retry_delay_seconds: retry_delay_seconds ? parseInt(retry_delay_seconds) : undefined,
+                folder_prefix: folder_prefix || undefined, // ใช้ default จาก schema ถ้า undefined
+                timestamp_format: timestamp_format || undefined, // ใช้ default จาก schema ถ้า undefined
+                discord_webhook_url: discord_webhook_url || null, // ส่ง null ถ้าไม่มี
+                notification_on_success: notification_on_success || null,
+                notification_on_failure: notification_on_failure || null,
             }
         });
 
@@ -97,7 +109,11 @@ export const getTasksForComputer = async (req: AuthRequest, res: Response) => {
 export const updateTask = async (req: AuthRequest, res: Response) => {
     const { taskId } = req.params;
     const userId = req.user?.sub;
-    const { name, source_path, destination_path, schedule, is_active } = req.body;
+    const { name, source_path, destination_path, schedule, is_active,
+            backup_keep_count, retry_attempts, retry_delay_seconds,
+            folder_prefix, timestamp_format,
+            discord_webhook_url, notification_on_success, notification_on_failure
+          } = req.body;
 
     try {
         const task = await prisma.tasks.findFirst({
@@ -123,6 +139,14 @@ export const updateTask = async (req: AuthRequest, res: Response) => {
                 destination_path,
                 schedule,
                 is_active,
+                backup_keep_count: backup_keep_count !== undefined ? (backup_keep_count === null ? null : parseInt(backup_keep_count)) : undefined,
+                retry_attempts: retry_attempts !== undefined ? (retry_attempts === null ? null : parseInt(retry_attempts)) : undefined,
+                retry_delay_seconds: retry_delay_seconds !== undefined ? (retry_delay_seconds === null ? null : parseInt(retry_delay_seconds)) : undefined,
+                folder_prefix: folder_prefix,
+                timestamp_format: timestamp_format,
+                discord_webhook_url: discord_webhook_url,
+                notification_on_success: notification_on_success,
+                notification_on_failure: notification_on_failure,
             },
         });
 

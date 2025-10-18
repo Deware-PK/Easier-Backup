@@ -2,7 +2,8 @@ import { type Request, type Response } from 'express';
 import prisma from '../../db.js';
 import { hashPassword, comparePassword } from '../../services/password.service.js';
 import { generateUserToken } from '../../services/token.service.js';
-import { PrismaClientKnownRequestError } from '@prisma/client/runtime/library.js';
+import { Prisma } from '@prisma/client';
+// import { PrismaClientKnownRequestError } from '@prisma/client/runtime/library.js';
 
 /**
  * @description Register a new user
@@ -22,7 +23,7 @@ export const registerUser = async (req: Request, res: Response) => {
             data: {
                 username,
                 email,
-                password_hash: hashedPassword.toString(),
+                password_hash: hashedPassword,
             },
         });
 
@@ -37,11 +38,18 @@ export const registerUser = async (req: Request, res: Response) => {
 
     } catch (error) {
 
-        if ((error as PrismaClientKnownRequestError) instanceof PrismaClientKnownRequestError) {
-            if ((error as PrismaClientKnownRequestError).code === 'P2002') {
+        if (error instanceof Prisma.PrismaClientKnownRequestError) {
+          if (error.code === 'P2002') {
                 return res.status(409).json({ message: 'Username or email already in use' });
-            }
+          }
         }
+
+        // if ((error as PrismaClientKnownRequestError) instanceof PrismaClientKnownRequestError) {
+        //     if ((error as PrismaClientKnownRequestError).code === 'P2002') {
+        //         return res.status(409).json({ message: 'Username or email already in use' });
+        //     }
+        // }
+
         console.error(error);
         return res.status(500).json({ message: 'Internal Error Server' });
     };
@@ -77,6 +85,7 @@ export const loginUser = async (req: Request, res: Response) => {
 
     res.status(200).json({
       message: 'Logged in successfully!',
+      username: user.username,
       token: token,
     });
 
