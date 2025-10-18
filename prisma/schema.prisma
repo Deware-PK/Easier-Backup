@@ -39,6 +39,10 @@ model computers {
   last_seen_at  DateTime?   @db.Timestamptz()
   registered_at DateTime    @default(now()) @db.Timestamptz()
 
+  default_backup_keep_count   Int?  @default(3)
+  default_retry_attempts      Int?  @default(3)
+  default_retry_delay_seconds Int?  @default(5)
+
   // Relation: A computer belongs to one user
   user          users       @relation(fields: [user_id], references: [id], onDelete: Cascade)
 
@@ -56,6 +60,20 @@ model tasks {
   schedule         String        @db.VarChar(50) // Cron expression
   is_active        Boolean       @default(true)
   created_at       DateTime      @default(now()) @db.Timestamptz()
+
+  // --- Override Settings (ต่อ Task) ---
+  backup_keep_count   Int?
+  retry_attempts      Int?
+  retry_delay_seconds Int?
+
+  // --- Subfolder Settings ---
+  folder_prefix     String?   @default("backup_") @db.VarChar(50)
+  timestamp_format  String?   @default("%Y%m%d_%H%M%S") @db.VarChar(50)
+
+  // --- Notification Settings (ต่อ Task) ---
+  discord_webhook_url     String?   @db.Text // Optional
+  notification_on_success String?   @db.Text // Optional, อาจใส่ default message ตอนอ่าน
+  notification_on_failure String?   @db.Text // Optional
 
   // Relation: A task belongs to one computer
   computer         computers     @relation(fields: [computer_id], references: [id], onDelete: Cascade)

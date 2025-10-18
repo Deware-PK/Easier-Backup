@@ -37,7 +37,23 @@ export function initializeWebSocket(server: import('http').Server) {
                         where: { id: BigInt(computerId.toString()) },
                         data: { last_seen_at: new Date() },
                     });
+                } else if (data.action === 'update-job-status') {
+                    const { jobId, status, details } = data;
+
+                    if (jobId && (status === 'success' || status === 'failed')) {
+                        console.log(`Job status update received for Job ID ${jobId}: ${status}`);
+                        await prisma.backup_jobs.update({
+                            where: { id: BigInt(jobId) },
+                            data: {
+                                status: status,
+                                completed_at: new Date(),
+                                details: details || null,
+                            }
+                        });
+                    }
+
                 }
+
             } catch (e) {
                 console.error('Invalid message from agent:', message.toString());
             }

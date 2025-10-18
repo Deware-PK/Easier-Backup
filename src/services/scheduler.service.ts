@@ -38,9 +38,17 @@ export function initializeScheduler() {
                     if (previousRun >= oneMinuteAgo) {
                         
                         console.log(`Task ${task.id} (${task.name}) is due. Sending command...`);
+                        
+                        const newJob = await prisma.backup_jobs.create({
+                            data: {
+                                task_id: task.id,
+                                status: 'running'
+                            }
+                        });
 
                         const command = {
                             action: 'start-backup',
+                            jobId: newJob.id.toString(),
                             sourceFile: task.source_path,
                             destinationFolder: task.destination_path
                         };

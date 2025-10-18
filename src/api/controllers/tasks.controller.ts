@@ -173,3 +173,74 @@ export const deleteTask = async (req: AuthRequest, res: Response) => {
         res.status(500).json({ message: 'Internal Server Error' });
     }
 };
+
+/**
+ * @description Get the total count of tasks for the logged-in user
+ * @route GET /api/v1/tasks/user/count
+ */
+export const getTotalTasksForUser = async (req: AuthRequest, res: Response) => {
+    const userId = req.user?.sub;
+
+    if (!userId) {
+        return res.status(401).json({ message: 'User not found' });
+    }
+
+    try {
+        const count = await prisma.tasks.count({
+            where: {
+                computer: {
+                    user_id: BigInt(userId),
+                },  
+            }
+        });
+        res.status(200).json({ totalTasks: count });
+    } catch (error) {
+        console.error("Error counting tasks:", error);
+        res.status(500).json({ message: 'Internal Server Error' });
+    }
+};
+
+/**
+ * @description Get all tasks for the logged-in user
+ * @route GET /api/v1/tasks/user
+ */
+export const getTasksForUser = async (req: AuthRequest, res: Response) => {
+    const userId = req.user?.sub;
+
+    if (!userId) {
+        return res.status(401).json({ message: 'User not found' });
+    }
+
+    try {
+
+        const tasks = await prisma.tasks.findMany({
+            where: {
+                computer: {
+                    user_id: BigInt(userId)
+                }
+            },
+            orderBy: {
+                created_at: 'desc' 
+            },
+
+            include: {
+                computer: {
+                    select: { name: true }
+                }
+            }
+        });
+        
+        const formattedTasks = tasks.map(task => ({
+            ...task,
+            id: task.id.toString(),
+            computer_id: task.computer_id.toString(),
+            computerName: task.computer.name 
+        }));
+
+        res.status(200).json(formattedTasks);
+
+    } catch (error) {
+        console.error("Error fetching tasks for user:", error);
+        res.status(500).json({ message: 'Internal Server Error' });
+    }
+};

@@ -62,25 +62,30 @@ export const getUserComputers = async (req: AuthRequest, res: Response) => {
             where: {
                 user_id: BigInt(userId),
             },
-            
-            select: {
-                id: true,
-                name: true,
-                os: true,
-                status: true,
-                last_seen_at: true,
+
+            include: {
+                _count: {
+                    select: { tasks: true }
+                }
             },
+            orderBy: {
+                registered_at: 'asc'
+            }
         });
 
         const formattedComputers = computers.map(computer => ({
-            ...computer,
-            id: computer.id.toString()
+            id: computer.id.toString(),
+            name: computer.name,
+            os: computer.os,
+            status: computer.status,
+            last_seen_at: computer.last_seen_at,
+            taskCount: computer._count.tasks
         }));
 
         res.status(200).json(formattedComputers);
-        
+
     } catch (error) {
         console.error("Error while pulling computers data: ", error);
         res.status(500).json({ message: 'Internal Server Error' });
     }
-} 
+}

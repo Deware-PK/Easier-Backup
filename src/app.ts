@@ -1,6 +1,7 @@
 import express from 'express';
 import http from 'http';
 import 'dotenv/config';
+import cors from 'cors';
 
 // Import services
 import { initializeWebSocket } from './services/websocket.service.js';
@@ -10,11 +11,12 @@ import { initializeScheduler } from './services/scheduler.service.js';
 import apiRouter from './api/routes/index.js';
 
 // Properties
-const port = process.env.PORT || 3000;
+const port = process.env.PORT || 3001;
 const app = express();
 const apiVersion = '/api/v1';
 
 // Setup
+app.use(cors({ origin: 'http://localhost:3000' }));
 app.use(express.json());
 
 // HTTP Server
