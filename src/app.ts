@@ -9,6 +9,7 @@ import { initializeScheduler } from './services/scheduler.service.js';
 
 // Import Routes
 import apiRouter from './api/routes/index.js';
+import { generalApiLimiter } from './middlewares/rateLimit.middleware.js';
 
 // Properties
 const port = process.env.PORT || 3001;
@@ -19,6 +20,9 @@ const apiVersion = '/api/v1';
 const allowedOrigins = ['http://localhost:3000'];
 app.use(cors({ origin: allowedOrigins }));
 app.use(express.json());
+
+// Trust proxy for rate limiting behind proxies
+app.set('trust proxy', 1);
 
 // HTTP Server
 const server = http.createServer(app);
@@ -44,6 +48,9 @@ function startSyncedScheduler() {
         }, delayInMs);
     }
 }
+
+// Limiter
+app.use(apiVersion, generalApiLimiter);
 
 // API Router
 app.use(apiVersion, apiRouter);

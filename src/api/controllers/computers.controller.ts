@@ -100,3 +100,39 @@ export const getUserComputers = async (req: AuthRequest, res: Response) => {
         res.status(500).json({ message: 'Internal Server Error' });
     }
 }
+
+/**
+ * @description Delete a computer (and cascade delete its tasks and jobs)
+ * @route DELETE /api/v1/computers/:computerId
+ */
+export const deleteComputer = async (req: AuthRequest, res: Response) => {
+    const { computerId } = req.params;
+    const userId = req.user?.sub;
+
+    if (!computerId || !/^\d+$/.test(computerId)) {
+        return res.status(400).json({ message: 'Invalid computerId' });
+    }
+    if (!userId) {
+        return res.status(401).json({ message: 'UserId not found!' });
+    }
+
+    try {
+        
+        const computer = await prisma.computers.findFirst({
+            where: { id: BigInt(computerId), user_id: BigInt(userId) },
+            select: { id: true }
+        });
+
+        if (!computer) {
+            return res.status(403).json({ message: "You don't have permission!" });
+        }
+
+        
+        await prisma.computers.delete({ where: { id: BigInt(computerId) } });
+
+        return res.status(200).json({ message: 'Computer deleted successfully (tasks and jobs removed).' });
+    } catch (error) {
+        console.error('Error deleting computer:', error);
+        return res.status(500).json({ message: 'Internal Server Error' });
+    }
+};

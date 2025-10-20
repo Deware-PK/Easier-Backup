@@ -15,6 +15,13 @@ const JWT_EXPIRES_IN = '1d';
  * @returns 
  */
 export const generateUserToken = (userId: BigInt, role: string): string => {
+
+    if (process.env.NODE_ENV === 'production') {
+        if (!process.env.JWT_SECRET || process.env.JWT_SECRET === 'default-secret-key-for-dev-only') {
+            throw new Error('JWT_SECRET must be set securely in production');
+        }
+    }
+
     const payload = {
         sub: userId.toString(),
         role: role,
@@ -31,6 +38,13 @@ export const generateUserToken = (userId: BigInt, role: string): string => {
  * @returns 
  */
 export const verifyUserToken = (token: string): { sub: string, role: string } | null => {
+
+    if (process.env.NODE_ENV === 'production') {
+        if (!process.env.JWT_SECRET || process.env.JWT_SECRET === 'default-secret-key-for-dev-only') {
+            throw new Error('JWT_SECRET must be set securely in production');
+        }
+    }
+
     try {
         const decoded = jwt.verify(token, JWT_SECRET);
         return decoded as { sub: string, role: string };

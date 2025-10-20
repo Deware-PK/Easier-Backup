@@ -1,7 +1,7 @@
 import bcrypt from "bcryptjs";
 
 // Determine the complexity of the encryption (8-12 is recommended!)
-const saltRounds = 8;
+const saltRounds = 12;
 
 /**
  * Parsing plain password to Hash
