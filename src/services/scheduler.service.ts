@@ -14,7 +14,6 @@ export function initializeScheduler() {
 
         
         try {
-            // 👇 2. Include computer data
             const activeTasks = await prisma.tasks.findMany({
                 where: { is_active: true },
                 include: { 
@@ -66,7 +65,10 @@ export function initializeScheduler() {
                             retryAttempts: task.retry_attempts ?? task.computer.default_retry_attempts ?? 3,
                             retryDelay: task.retry_delay_seconds ?? task.computer.default_retry_delay_seconds ?? 5,
                             folderPrefix: task.folder_prefix ?? 'backup_',
-                            timestampFormat: task.timestamp_format ?? '%Y%m%d_%H%M%S'
+                            timestampFormat: task.timestamp_format ?? '%Y%m%d_%H%M%S',
+                            discordWebhookUrl: task.discord_webhook_url ?? null,
+                            notificationOnSuccess: task.notification_on_success ?? null,
+                            notificationOnFailure: task.notification_on_failure ?? null,
                         };
                         
                         sendCommandToAgent(task.computer_id.toString(), command);

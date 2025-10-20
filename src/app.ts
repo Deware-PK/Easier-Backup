@@ -16,7 +16,8 @@ const app = express();
 const apiVersion = '/api/v1';
 
 // Setup
-app.use(cors({ origin: 'http://localhost:3000' }));
+const allowedOrigins = ['http://localhost:3000'];
+app.use(cors({ origin: allowedOrigins }));
 app.use(express.json());
 
 // HTTP Server
