@@ -19,6 +19,7 @@ export function initializeScheduler() {
                 include: { 
                     computer: { 
                         select: {
+                            status: true,
                             default_backup_keep_count: true,
                             default_retry_attempts: true,
                             default_retry_delay_seconds: true
@@ -33,9 +34,14 @@ export function initializeScheduler() {
             }
 
             for (const task of activeTasks) {
-                //
+                
                 try {
 
+                    if (!/^[\d\*\/\-,\s]+$/.test(task.schedule)) {
+                        console.error(`Invalid cron format for Task ID ${task.id}: "${task.schedule}"`);
+                        continue;
+                    }
+    
                     const options = {
                         currentDate: now,
                         tz: 'Asia/Bangkok',
@@ -47,8 +53,13 @@ export function initializeScheduler() {
 
                     if (previousRun >= oneMinuteAgo) {
                         
-                        console.log(`Task ${task.id} (${task.name}) is due. Sending command...`);
+                        if (!task.computer || task.computer.status !== 'online') {
+                            console.log(`   -> Computer ID ${task.computer_id} is offline. Skipping task.`);
+                            continue;
+                        }
                         
+                        console.log(`Task ${task.id} (${task.name}) is due. Sending command...`);
+
                         const newJob = await prisma.backup_jobs.create({
                             data: {
                                 task_id: task.id,
@@ -80,6 +91,28 @@ export function initializeScheduler() {
         } catch (error) {
             console.error('Error during scheduler run:', error);
         }
+    });
+
+    // Clean up old backup jobs every day at 3 AM
+    cron.schedule('0 3 * * *', async () => {
+        try {
+            const thirtyDaysAgo = new Date();
+            thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+            const result = await prisma.backup_jobs.deleteMany({
+                where: {
+                    started_at: {
+                        lt: thirtyDaysAgo
+                    }
+                }
+            });
+
+            console.log(`🗑️  Cleaned up ${result.count} backup jobs older than 30 days.`);
+        } catch (error) {
+            console.error('❌ Error cleaning up old backup jobs:', error);
+        }
+    }, {
+        timezone: 'Asia/Bangkok'
     });
 
     console.log('Scheduler is initialized and running.');

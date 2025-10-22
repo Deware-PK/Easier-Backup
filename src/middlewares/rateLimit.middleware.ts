@@ -11,6 +11,15 @@ type Counter = { count: number; expiresAt: number };
 
 const store = new Map<string, Counter>();
 
+setInterval(() => {
+  const now = Date.now();
+  for (const [key, record] of store.entries()) {
+    if (record.expiresAt <= now) {
+      store.delete(key);
+    }
+  }
+}, 5 * 60 * 1000);
+
 function defaultKey(req: Request) {
   return `${req.ip}:${req.baseUrl}${req.path}`;
 }

@@ -3,7 +3,7 @@ import prisma from '../../db.js';
 import { hashPassword, comparePassword } from '../../services/password.service.js';
 import { generateUserToken } from '../../services/token.service.js';
 import { Prisma } from '@prisma/client';
-// import { PrismaClientKnownRequestError } from '@prisma/client/runtime/library.js';
+import { logAudit } from '../../middlewares/audit.middleware.js';
 
 /**
  * @description Register a new user
@@ -27,6 +27,8 @@ export const registerUser = async (req: Request, res: Response) => {
             },
         });
 
+        await logAudit(req, { action: 'register', status: 'success', details: `User: ${username}` });
+
         res.status(201).json({
             message: 'Registered successfully!',
             user: {
@@ -40,17 +42,12 @@ export const registerUser = async (req: Request, res: Response) => {
 
         if (error instanceof Prisma.PrismaClientKnownRequestError) {
           if (error.code === 'P2002') {
-                return res.status(409).json({ message: 'Username or email already in use' });
+              await logAudit(req, { action: 'register', status: 'failed', details: 'Duplicate username/email' });
+              return res.status(409).json({ message: 'Username or email already in use' });
           }
         }
 
-        // if ((error as PrismaClientKnownRequestError) instanceof PrismaClientKnownRequestError) {
-        //     if ((error as PrismaClientKnownRequestError).code === 'P2002') {
-        //         return res.status(409).json({ message: 'Username or email already in use' });
-        //     }
-        // }
-
-        console.error(error);
+        logError('User Registration', error);
         return res.status(500).json({ message: 'Internal Error Server' });
     };
 };
@@ -72,16 +69,20 @@ export const loginUser = async (req: Request, res: Response) => {
     });
 
     if (!user) {
+      await logAudit(req, { action: 'login', status: 'failed', details: 'User not found' });
       return res.status(401).json({ message: 'Email or Password is incorrect!' });
     }
 
     const isPasswordCorrect = await comparePassword(password, user.password_hash);
 
     if (!isPasswordCorrect) {
+      await logAudit(req, { action: 'login', status: 'failed', details: 'Wrong password' });
       return res.status(401).json({ message: 'Email or Password is incorrect!' });
     }
 
     const token = generateUserToken(user.id, user.role);
+
+    await logAudit(req, { action: 'login', status: 'success', details: `User: ${user.username}` });
 
     res.status(200).json({
       message: 'Logged in successfully!',
@@ -94,3 +95,16 @@ export const loginUser = async (req: Request, res: Response) => {
     return res.status(500).json({ message: 'Internal Error Server' });
   }
 };
+
+export function logError(context: string, error: any) {
+  const sanitized = {
+    message: error?.message || 'Unknown error',
+    code: error?.code,
+    context
+  };
+  if (process.env.NODE_ENV === 'development') {
+    console.error(`[${context}]`, error);
+  } else {
+    console.error(`[${context}]`, sanitized);
+  }
+}

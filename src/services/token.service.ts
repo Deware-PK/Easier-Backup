@@ -37,7 +37,7 @@ export const generateUserToken = (userId: BigInt, role: string): string => {
  * @param token - JWT Token from Authorization Header
  * @returns 
  */
-export const verifyUserToken = (token: string): { sub: string, role: string } | null => {
+export const verifyUserToken = (token: string): { sub: string; role: string; iat: number } | null => {
 
     if (process.env.NODE_ENV === 'production') {
         if (!process.env.JWT_SECRET || process.env.JWT_SECRET === 'default-secret-key-for-dev-only') {
@@ -46,8 +46,8 @@ export const verifyUserToken = (token: string): { sub: string, role: string } | 
     }
 
     try {
-        const decoded = jwt.verify(token, JWT_SECRET);
-        return decoded as { sub: string, role: string };
+        const decoded = jwt.verify(token, JWT_SECRET) as { sub: string; role: string; iat: number };
+        return decoded;
     } catch (error) {
         return null;
     }

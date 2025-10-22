@@ -2,6 +2,10 @@ import { type Response } from 'express';
 import { type AuthRequest } from '../../middlewares/auth.middleware.js';
 import prisma from '../../db.js';
 
+/**
+ * @description Get backup jobs for a specific task belonging to the logged-in user
+ * @route GET /api/v1/jobs/task/:taskId
+ */
 export const getJobsForTask = async (req: AuthRequest, res: Response) => {
     const { taskId } = req.params;
     const userId = req.user?.sub;

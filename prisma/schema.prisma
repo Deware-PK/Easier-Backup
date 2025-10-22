@@ -17,15 +17,51 @@ datasource db {
 
 // Model for users and their roles
 model users {
-  id            BigInt      @id @default(autoincrement())
-  username      String      @unique @db.VarChar(50)
-  email         String      @unique @db.VarChar(255)
-  password_hash String      @db.VarChar(255)
-  role          String      @default("user") @db.VarChar(10) // 'user' or 'admin'
-  created_at    DateTime    @default(now()) @db.Timestamptz()
+  id                  BigInt      @id @default(autoincrement())
+  username            String      @unique @db.VarChar(50)
+  email               String      @unique @db.VarChar(255)
+  password_hash       String      @db.VarChar(255)
+  role                String      @default("user") @db.VarChar(10) // 'user' or 'admin'
+  created_at          DateTime    @default(now()) @db.Timestamptz()
+  password_changed_at DateTime?   @db.Timestamptz()
+  recovery_codes_viewed   Boolean     @default(false)
 
   // Relation: A user can have many computers
-  computers     computers[]
+  computers             computers[]
+  audit_logs            audit_logs[]
+  password_recovery_codes password_recovery_codes[]
+}
+
+model audit_logs {
+  id          BigInt    @id @default(autoincrement())
+  user_id     BigInt?   // null = unauthenticated action
+  ip_address  String    @db.VarChar(45)
+  action      String    @db.VarChar(100) // 'login', 'register', 'create_task', 'delete_computer', etc.
+  resource    String?   @db.VarChar(100) // 'users', 'tasks', 'computers'
+  resource_id String?   @db.VarChar(50)
+  status      String    @db.VarChar(20)  // 'success', 'failed'
+  details     String?   @db.Text
+  created_at  DateTime  @default(now()) @db.Timestamptz()
+
+  user        users?    @relation(fields: [user_id], references: [id], onDelete: SetNull)
+
+  @@index([user_id])
+  @@index([ip_address])
+  @@index([created_at])
+  @@index([action])
+}
+
+// รหัสสำรอง single-use
+model password_recovery_codes {
+  id         BigInt    @id @default(autoincrement())
+  user_id    BigInt
+  code_hash  String    @db.VarChar(255)
+  used_at    DateTime? @db.Timestamptz()
+  created_at DateTime  @default(now()) @db.Timestamptz()
+
+  user users @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@index([user_id])
 }
 
 // Model for registered client computers/agents
@@ -49,6 +85,8 @@ model computers {
   // Relation: A computer can have many tasks
   tasks         tasks[]
 }
+
+
 
 // Model for backup tasks/schedules
 model tasks {

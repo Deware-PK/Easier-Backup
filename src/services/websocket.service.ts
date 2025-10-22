@@ -5,6 +5,11 @@ import prisma from "../db.js";
 
 const activeConnections = new Map<string, WebSocket>();
 const MAX_WS_PAYLOAD = 64 * 1024; // 64KB
+const HEARTBEAT_TIMEOUT = 90000; // 90 seconds
+const heartbeatTimers = new Map<string, NodeJS.Timeout>();
+const wsRateLimiter = new Map<string, { count: number; reset: number }>();
+const WS_MSG_LIMIT = 20; // 20 messages per 10 seconds
+const WS_WINDOW = 10000;
 
 /**
  * Initialize function for websocket
@@ -28,6 +33,13 @@ export function initializeWebSocket(server: import("http").Server) {
     activeConnections.set(computerIdStr, ws);
     await updateComputerStatus(computerId, "online");
 
+    const timeoutId = setTimeout(() => {
+      console.log(`Heartbeat timeout for Computer ID ${computerIdStr}`);
+      ws.close(1000, "Heartbeat timeout");
+    }, HEARTBEAT_TIMEOUT);
+
+    heartbeatTimers.set(computerIdStr, timeoutId);
+
     ws.on("message", async (message: Buffer) => {
       try {
 
@@ -36,9 +48,32 @@ export function initializeWebSocket(server: import("http").Server) {
           return;
         }
 
+        const now = Date.now();
+        const limiter = wsRateLimiter.get(computerIdStr);
+        if (!limiter || limiter.reset < now) {
+          wsRateLimiter.set(computerIdStr, { count: 1, reset: now + WS_WINDOW });
+        } else {
+          limiter.count++;
+          if (limiter.count > WS_MSG_LIMIT) {
+            ws.close(1008, "Too many messages");
+            return;
+          }
+        }
+
         const data = JSON.parse(message.toString());
 
+        if (!['heartbeat', 'update-job-status'].includes(data.action)) {
+          console.warn(`Unknown action from ${computerIdStr}: ${data.action}`);
+          return;
+        }
+        
         if (data.action === "heartbeat") {
+          clearTimeout(heartbeatTimers.get(computerIdStr)!);
+          const newTimeout = setTimeout(() => {
+            ws.close(1000, "Heartbeat timeout");
+          }, HEARTBEAT_TIMEOUT);
+          heartbeatTimers.set(computerIdStr, newTimeout);
+
           console.log(`Heartbeat received from Computer ID ${computerIdStr}`);
 
           await prisma.computers.update({
@@ -114,6 +149,8 @@ export function initializeWebSocket(server: import("http").Server) {
     });
 
     ws.on("close", async () => {
+      clearTimeout(heartbeatTimers.get(computerIdStr)!);
+      heartbeatTimers.delete(computerIdStr);
       console.log(`Agent disconnected: Computer ID ${computerIdStr}`);
       activeConnections.delete(computerIdStr);
       await updateComputerStatus(computerId, "offline");

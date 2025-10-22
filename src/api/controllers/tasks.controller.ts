@@ -1,6 +1,17 @@
 import { type Response } from "express";
 import { type AuthRequest } from '../../middlewares/auth.middleware.js';
 import prisma from '../../db.js';
+import { logAudit } from '../../middlewares/audit.middleware.js';
+
+function isValidDiscordWebhook(url: string | null): boolean {
+  if (!url) return true; // null is OK
+  try {
+    const parsed = new URL(url);
+    return parsed.hostname === 'discord.com' || parsed.hostname.endsWith('.discord.com');
+  } catch {
+    return false;
+  }
+}
 
 /**
  * @description Create a new backup task for a specific computer
@@ -8,10 +19,15 @@ import prisma from '../../db.js';
  */
 export const createTask = async (req: AuthRequest, res: Response) => {
     const { computer_id, name, source_path, destination_path, schedule, 
-            backup_keep_count, retry_attempts, retry_delay_seconds,
+            is_active, backup_keep_count, retry_attempts, retry_delay_seconds,
             folder_prefix, timestamp_format,
             discord_webhook_url, notification_on_success, notification_on_failure
           } = req.body;
+
+    if (!isValidDiscordWebhook(discord_webhook_url)) {
+        return res.status(400).json({ message: 'Invalid Discord webhook URL.' });
+    }
+
     const userId = req.user?.sub;
 
     if (!computer_id || !name || !source_path || !destination_path || !schedule) {
@@ -37,6 +53,7 @@ export const createTask = async (req: AuthRequest, res: Response) => {
                 source_path,
                 destination_path,
                 schedule,
+                is_active,
                 backup_keep_count: backup_keep_count ? parseInt(backup_keep_count) : undefined,
                 retry_attempts: retry_attempts ? parseInt(retry_attempts) : undefined,
                 retry_delay_seconds: retry_delay_seconds ? parseInt(retry_delay_seconds) : undefined,
@@ -48,6 +65,14 @@ export const createTask = async (req: AuthRequest, res: Response) => {
             }
         });
 
+        await logAudit(req, {
+            action: 'create_task',
+            resource: 'tasks',
+            resourceId: newTask.id.toString(),
+            status: 'success',
+            details: `Task: ${name}`
+        });
+
         res.status(201).json({
             ...newTask,
             id: newTask.id.toString(),
@@ -57,6 +82,7 @@ export const createTask = async (req: AuthRequest, res: Response) => {
 
 
     } catch (error) {
+        await logAudit(req, { action: 'create_task', status: 'failed' });
         console.error("Error while pulling computers data: ", error);
         res.status(500).json({ message: 'Internal Server Error' });
     }
@@ -115,6 +141,10 @@ export const updateTask = async (req: AuthRequest, res: Response) => {
             discord_webhook_url, notification_on_success, notification_on_failure
           } = req.body;
 
+    if (!isValidDiscordWebhook(discord_webhook_url)) {
+        return res.status(400).json({ message: 'Invalid Discord webhook URL.' });
+    }
+    
     try {
         const task = await prisma.tasks.findFirst({
             where: {
@@ -150,6 +180,13 @@ export const updateTask = async (req: AuthRequest, res: Response) => {
             },
         });
 
+        await logAudit(req, {
+            action: 'update_task',
+            resource: 'tasks',
+            resourceId: taskId,
+            status: 'success'
+        });
+
         res.status(200).json({
             ...updatedTask,
             id: updatedTask.id.toString(),
@@ -157,6 +194,7 @@ export const updateTask = async (req: AuthRequest, res: Response) => {
         });
 
     } catch (error) {
+        await logAudit(req, { action: 'update_task', resource: 'tasks', resourceId: taskId, status: 'failed' });
         console.error("Error while pulling computers data: ", error);
         res.status(500).json({ message: 'Internal Server Error' });
     }
@@ -190,9 +228,17 @@ export const deleteTask = async (req: AuthRequest, res: Response) => {
             }
         });
 
+        await logAudit(req, {
+            action: 'delete_task',
+            resource: 'tasks',
+            resourceId: taskId,
+            status: 'success'
+        });
+
         res.status(200).json({ message: 'Task deleted successfully!' });
 
     } catch (error) {
+        await logAudit(req, { action: 'delete_task', resource: 'tasks', resourceId: taskId, status: 'failed' });
         console.error("Error while pulling computers data: ", error);
         res.status(500).json({ message: 'Internal Server Error' });
     }

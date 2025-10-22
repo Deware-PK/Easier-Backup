@@ -2,6 +2,7 @@ import { type Response } from 'express';
 import prisma from '../../db.js';
 import { AuthRequest } from '../../middlewares/auth.middleware.js';
 import { generateAgentToken } from '../../services/token.service.js';
+import { logAudit } from '../../middlewares/audit.middleware.js';
 
 /**
  * @description Register a new computer for the logged-in user
@@ -34,6 +35,13 @@ export const registerComputer = async (req: AuthRequest, res: Response) => {
             }
         });
 
+        await logAudit(req, {
+            action: 'create_computer',
+            resource: 'computers',
+            resourceId: newComputer.id.toString(),
+            status: 'success'
+        });
+
         res.status(201).json({
             message: 'Registered Computer Successfully',
             computer: {
@@ -45,6 +53,7 @@ export const registerComputer = async (req: AuthRequest, res: Response) => {
         });
 
     } catch (error) {
+        await logAudit(req, { action: 'create_computer', status: 'failed' });
         console.error("Error while registering computer: ", error);
         res.status(500).json({ message: 'Internal Server Error' });
     }
@@ -145,6 +154,14 @@ export const updateComputerName = async (req: AuthRequest, res: Response) => {
             }
         });
 
+        await logAudit(req, {
+            action: 'update_computer',
+            resource: 'computers',
+            resourceId: computerId,
+            status: 'success',
+            details: `New name: ${name.trim()}`
+        });
+
         return res.status(200).json({
             message: 'Computer name updated successfully',
             computer: {
@@ -156,6 +173,7 @@ export const updateComputerName = async (req: AuthRequest, res: Response) => {
         });
         
     } catch (error) {
+        await logAudit(req, { action: 'update_computer', resource: 'computers', resourceId: computerId, status: 'failed' });
         console.error('Error updating computer name:', error);
         return res.status(500).json({ message: 'Internal Server Error' });
     }
@@ -190,8 +208,16 @@ export const deleteComputer = async (req: AuthRequest, res: Response) => {
         
         await prisma.computers.delete({ where: { id: BigInt(computerId) } });
 
+        await logAudit(req, {
+            action: 'delete_computer',
+            resource: 'computers',
+            resourceId: computerId,
+            status: 'success'
+        });
+
         return res.status(200).json({ message: 'Computer deleted successfully (tasks and jobs removed).' });
     } catch (error) {
+        await logAudit(req, { action: 'delete_computer', resource: 'computers', resourceId: computerId, status: 'failed' });
         console.error('Error deleting computer:', error);
         return res.status(500).json({ message: 'Internal Server Error' });
     }

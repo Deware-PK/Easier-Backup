@@ -2,6 +2,7 @@ import express from 'express';
 import http from 'http';
 import 'dotenv/config';
 import cors from 'cors';
+import helmet from 'helmet';
 
 // Import services
 import { initializeWebSocket } from './services/websocket.service.js';
@@ -17,9 +18,10 @@ const app = express();
 const apiVersion = '/api/v1';
 
 // Setup
-const allowedOrigins = ['http://localhost:3000'];
-app.use(cors({ origin: allowedOrigins }));
-app.use(express.json());
+const allowedOrigins = process.env.ALLOWED_ORIGINS?.split(',') || ['http://localhost:3000'];
+app.use(helmet());
+app.use(cors({ origin: allowedOrigins })); // app.use(cors({ origin: allowedOrigins, credentials: true }));
+app.use(express.json({ limit: '64kb' }));
 
 // Trust proxy for rate limiting behind proxies
 app.set('trust proxy', 1);
@@ -50,7 +52,13 @@ function startSyncedScheduler() {
 }
 
 // Limiter
-app.use(apiVersion, generalApiLimiter);
+app.use(apiVersion, (req, res, next) => {
+
+    if (req.method === 'GET')
+        return next();
+    
+    generalApiLimiter(req, res, next);
+});
 
 // API Router
 app.use(apiVersion, apiRouter);
