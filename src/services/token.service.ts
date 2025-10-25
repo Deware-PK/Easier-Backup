@@ -47,6 +47,7 @@ export const verifyUserToken = (token: string): { sub: string; role: string; iat
 
     try {
         const decoded = jwt.verify(token, JWT_SECRET) as { sub: string; role: string; iat: number };
+        
         return decoded;
     } catch (error) {
         return null;

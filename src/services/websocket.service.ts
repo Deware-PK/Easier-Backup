@@ -1,6 +1,5 @@
 import { WebSocketServer, WebSocket } from "ws";
 import { type IncomingMessage } from "http";
-import url from "url";
 import prisma from "../db.js";
 
 const activeConnections = new Map<string, WebSocket>();
@@ -19,6 +18,21 @@ export function initializeWebSocket(server: import("http").Server) {
   const wss = new WebSocketServer({ server });
 
   wss.on("connection", async (ws: WebSocket, req: IncomingMessage) => {
+
+    // Require HTTPS behind proxy in production
+    if (process.env.NODE_ENV === 'production') {
+      const xfProto = (req.headers['x-forwarded-proto'] || '').toString();
+      if (xfProto.toLowerCase() !== 'https') {
+        ws.close(1008, "HTTPS required");
+        return;
+      }
+    }
+
+    if (req.url && !req.url.startsWith('/ws')) {
+      ws.close(1008, 'Invalid WS path');
+      return;
+    }
+
     const computerId = await authenticateAgent(req);
 
     if (!computerId) {
@@ -151,8 +165,9 @@ export function initializeWebSocket(server: import("http").Server) {
     ws.on("close", async () => {
       clearTimeout(heartbeatTimers.get(computerIdStr)!);
       heartbeatTimers.delete(computerIdStr);
-      console.log(`Agent disconnected: Computer ID ${computerIdStr}`);
+      wsRateLimiter.delete(computerIdStr);
       activeConnections.delete(computerIdStr);
+      console.log(`Agent disconnected: Computer ID ${computerIdStr}`);
       await updateComputerStatus(computerId, "offline");
     });
 
@@ -167,24 +182,16 @@ export function initializeWebSocket(server: import("http").Server) {
 /**
  * Function for authentication for Agent from Auth Token
  */
-async function authenticateAgent(req: IncomingMessage): Promise<BigInt | null> {
-    const headerToken = typeof req.headers['x-agent-token'] === 'string' ? req.headers['x-agent-token'] : undefined;
-    const { query } = url.parse(req.url || '', true);
-    const queryToken = typeof query.token === 'string' ? query.token : undefined;
-    const token = headerToken || queryToken;
-
-    if (typeof token !== 'string' || !token) {
-        return null;
-    }
-
-    try {
-        const computer = await prisma.computers.findUnique({
-            where: { auth_token: token },
-        });
-        return computer ? computer.id : null;
-    } catch {
-        return null;
-    }
+async function authenticateAgent(req: import('http').IncomingMessage): Promise<bigint | null> {
+  const headerToken = typeof req.headers['x-agent-token'] === 'string' ? req.headers['x-agent-token'] : undefined;
+  if (!headerToken) return null;
+  if (!/^[a-f0-9]{64}$/i.test(headerToken)) return null; // validate format
+  try {
+    const computer = await prisma.computers.findUnique({ where: { auth_token: headerToken } });
+    return computer ? computer.id : null;
+  } catch {
+    return null;
+  }
 }
 
 /**

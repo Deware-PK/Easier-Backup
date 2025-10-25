@@ -1,7 +1,7 @@
 import { Router } from "express";
-import { registerUser, loginUser } from "../controllers/users.controller.js";
+import { registerUser, loginUser, logoutUser } from "../controllers/users.controller.js";
 import { registerLimiter, loginLimiter } from "../../middlewares/rateLimit.middleware.js";
-import { validateBody, v } from "../../middlewares/validate.middleware.js";
+import { validateBody, validateEmptyBody, v } from "../../middlewares/validate.middleware.js";
 
 const router = Router();
 
@@ -15,5 +15,7 @@ router.post('/login', loginLimiter, validateBody({
   email: v.email(),
   password: v.requiredString(8, 100),
 }), loginUser);
+
+router.post('/logout', validateEmptyBody(), logoutUser);
 
 export default router;

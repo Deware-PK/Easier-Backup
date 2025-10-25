@@ -1,4 +1,5 @@
 import { type Request, type Response } from 'express';
+import { AuthRequest } from '../../middlewares/auth.middleware.js';
 import prisma from '../../db.js';
 import { hashPassword, comparePassword } from '../../services/password.service.js';
 import { generateUserToken } from '../../services/token.service.js';
@@ -82,18 +83,73 @@ export const loginUser = async (req: Request, res: Response) => {
 
     const token = generateUserToken(user.id, user.role);
 
+    // Sending token securely in HTTP-only cookie
+    const expiresInMilliseconds = Number(process.env.COOKIE_EXPIRES_IN_DAYS) * 24 * 60 * 60 * 1000; // 1 day
+    const expiresAtDate = new Date(Date.now() + expiresInMilliseconds);
+    const expiresAtTimestamp = expiresAtDate.getTime();
+    const isProd = process.env.NODE_ENV === 'production';
+
+    res.cookie('SESSION_TOKEN__DO_NOT_SHARE', token, {
+      httpOnly: true, // ป้องกัน JavaScript เข้าถึง
+      secure: isProd, // ใช้ HTTPS เท่านั้นใน Production
+      sameSite: isProd ? 'none' : 'lax', // ป้องกัน CSRF เบื้องต้น
+      expires: expiresAtDate, // กำหนดวันหมดอายุ
+      path: '/', // ใช้ได้ทั้งเว็บ
+    });
+
+    res.cookie('SESSION_EXPIRES_AT', String(expiresAtTimestamp), {
+      httpOnly: true, // **แนะนำให้เป็น true และปรับ Frontend**
+      secure: isProd,
+      sameSite: isProd ? 'none' : 'lax',
+      expires: expiresAtDate,
+      path: '/',
+    });
+
     await logAudit(req, { action: 'login', status: 'success', details: `User: ${user.username}` });
 
     res.status(200).json({
       message: 'Logged in successfully!',
       username: user.username,
-      token: token,
+      // token: token,
     });
 
   } catch (error) {
     console.error(error);
     return res.status(500).json({ message: 'Internal Error Server' });
   }
+};
+
+/**
+ * @description Logout a user by clearing the authentication cookies
+ * @route POST /api/v1/users/logout
+ */
+export const logoutUser = async (req: AuthRequest, res: Response) => {
+   try {
+    
+    const isProd = process.env.NODE_ENV === 'production';
+    const cookieOpts = {
+      httpOnly: true,
+      secure: isProd,
+      sameSite: isProd ? 'none' : 'lax',
+      path: '/',
+    } as const;
+
+    res.clearCookie('SESSION_TOKEN__DO_NOT_SHARE', cookieOpts);
+    res.clearCookie('SESSION_EXPIRES_AT', cookieOpts);
+
+    if (req.user) {
+      await logAudit(req, { action: 'logout', status: 'success' });
+    } else {
+      await logAudit(req, { action: 'logout', status: 'success', details: 'No active session' });
+    }
+    
+    return res.status(200).json({ message: 'Logged out successfully!' });
+
+   } catch (error) {
+
+    logError('User Logout', error);
+    return res.status(500).json({ message: 'Internal Error Server' });
+   }
 };
 
 export function logError(context: string, error: any) {

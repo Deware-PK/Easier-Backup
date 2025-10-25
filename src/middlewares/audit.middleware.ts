@@ -3,7 +3,7 @@ import { AuthRequest } from './auth.middleware.js';
 import prisma from '../db.js';
 
 type AuditAction = 
-  | 'login' | 'register' 
+  | 'login' | 'register' | 'logout'
   | 'create_computer' | 'update_computer' | 'delete_computer'
   | 'create_task' | 'update_task' | 'delete_task'
   | 'view_audit_logs'

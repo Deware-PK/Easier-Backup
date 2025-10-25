@@ -2,6 +2,23 @@ import { type Request, type Response, type NextFunction } from 'express';
 import { verifyUserToken } from '../services/token.service.js';
 import prisma from '../db.js';
 
+function parseCookies(cookieHeader: string | undefined): { [key: string]: string } {
+  const cookies: { [key: string]: string } = {};
+  if (!cookieHeader) {
+    return cookies;
+  }
+
+  cookieHeader.split(';').forEach(cookie => {
+    let [name, ...rest] = cookie.split('=');
+    name = name?.trim();
+    if (!name) return;
+    const value = rest.join('=').trim();
+    cookies[name] = value;
+  });
+
+  return cookies;
+}
+
 export interface AuthRequest extends Request {
   user?: {
     sub: string;
@@ -13,13 +30,23 @@ export interface AuthRequest extends Request {
 export const protect = async (req: AuthRequest, res: Response, next: NextFunction) => {
   let token: string | undefined;
 
-  if (req.headers.authorization && req.headers.authorization.startsWith('Bearer')) {
+  // Checking if token is expired and return 401
+  const parsedCookies = parseCookies(req.headers.cookie);
+  req.cookies = parsedCookies;
+  token = req.cookies?.SESSION_TOKEN__DO_NOT_SHARE;
+
+  if (!token) {
+    return res.status(401).json({ message: 'Not authorized, no token' });
+  }
+
     try {
-      token = req.headers.authorization.split(' ')[1];
 
       const decoded = verifyUserToken(token);
+      
       if (!decoded) {
-        return res.status(401).json({ message: 'Not authorized, token failed' });
+        res.clearCookie('SESSION_TOKEN__DO_NOT_SHARE', { path: '/' });
+        res.clearCookie('SESSION_EXPIRES_AT', { path: '/' });
+        return res.status(401).json({ message: 'Not authorized, token failed or expired' });
       }
 
       // Revoke tokens issued before last password change
@@ -29,12 +56,16 @@ export const protect = async (req: AuthRequest, res: Response, next: NextFunctio
       });
 
       if (!user) {
+        res.clearCookie('SESSION_TOKEN__DO_NOT_SHARE', { path: '/' });
+        res.clearCookie('SESSION_EXPIRES_AT', { path: '/' });
         return res.status(401).json({ message: 'Not authorized, user not found' });
       }
 
       if (user.password_changed_at && decoded.iat) {
         const tokenIatMs = decoded.iat * 1000;
         if (tokenIatMs < new Date(user.password_changed_at).getTime()) {
+          res.clearCookie('SESSION_TOKEN__DO_NOT_SHARE', { path: '/' });
+          res.clearCookie('SESSION_EXPIRES_AT', { path: '/' });
           return res.status(401).json({ message: 'Not authorized, token revoked' });
         }
       }
@@ -45,11 +76,7 @@ export const protect = async (req: AuthRequest, res: Response, next: NextFunctio
     } catch (error) {
       return res.status(401).json({ message: 'Not authorized, token failed' });
     }
-  }
-
-  if (!token) {
-    return res.status(401).json({ message: 'Not authorized, no token' });
-  }
+  
 };
 
 /**
