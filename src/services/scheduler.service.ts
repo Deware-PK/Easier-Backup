@@ -12,7 +12,6 @@ export function initializeScheduler() {
         const now = new Date();
         console.log(`\n⏰ Scheduler running at ${now.toLocaleString('th-TH', { timeZone: 'Asia/Bangkok' })}`);
 
-        
         try {
             const activeTasks = await prisma.tasks.findMany({
                 where: { is_active: true },
@@ -52,37 +51,67 @@ export function initializeScheduler() {
                     const oneMinuteAgo = new Date(now.getTime() - 60000);
 
                     if (previousRun >= oneMinuteAgo) {
-                        
-                        if (!task.computer || task.computer.status !== 'online') {
-                            console.log(`   -> Computer ID ${task.computer_id} is offline. Skipping task.`);
-                            continue;
-                        }
-                        
-                        console.log(`Task ${task.id} (${task.name}) is due. Sending command...`);
+                        console.log(`Task ${task.id} (${task.name}) is due.`);
 
+                        const isOnline = task.computer && task.computer.status === 'online';
+
+                        // --- ADDED: Check for existing queued job (prevent duplicate queue) ---
+                        const existingQueuedJob = await prisma.backup_jobs.findFirst({
+                            where: {
+                                task_id: task.id,
+                                status: 'queued'
+                            },
+                            orderBy: { started_at: 'desc' }
+                        });
+
+                        if (existingQueuedJob) {
+                            // If agent is still offline, mark old queued job as failed
+                            if (!isOnline) {
+                                await prisma.backup_jobs.update({
+                                    where: { id: existingQueuedJob.id },
+                                    data: {
+                                        status: 'failed',
+                                        completed_at: now,
+                                        details: 'Agent remained offline, replaced by newer queued job'
+                                    }
+                                });
+                                console.log(`   -> Marked old queued job ${existingQueuedJob.id} as failed (Task ${task.id})`);
+                            } else {
+                                // Agent is now online but old queued job exists - processQueuedJobs will handle it
+                                console.log(`   -> Existing queued job ${existingQueuedJob.id} will be processed by online handler`);
+                                continue; // Skip creating new job, let online handler process queue
+                            }
+                        }
+
+                        // --- Create new job ---
                         const newJob = await prisma.backup_jobs.create({
                             data: {
                                 task_id: task.id,
-                                status: 'running'
+                                status: isOnline ? 'running' : 'queued' // CHANGED: set 'queued' if offline
                             }
                         });
 
-                        const command = {
-                            action: 'start-backup',
-                            jobId: newJob.id.toString(),
-                            sourceFile: task.source_path,
-                            destinationBaseFolder: task.destination_path,
-                            keepCount: task.backup_keep_count ?? task.computer.default_backup_keep_count ?? 3, // ใส่ fallback สุดท้าย
-                            retryAttempts: task.retry_attempts ?? task.computer.default_retry_attempts ?? 3,
-                            retryDelay: task.retry_delay_seconds ?? task.computer.default_retry_delay_seconds ?? 5,
-                            folderPrefix: task.folder_prefix ?? 'backup_',
-                            timestampFormat: task.timestamp_format ?? '%Y%m%d_%H%M%S',
-                            discordWebhookUrl: task.discord_webhook_url ?? null,
-                            notificationOnSuccess: task.notification_on_success ?? null,
-                            notificationOnFailure: task.notification_on_failure ?? null,
-                        };
-                        
-                        sendCommandToAgent(task.computer_id.toString(), command);
+                        if (isOnline) {
+                            // Send command immediately if online
+                            const command = {
+                                action: 'start-backup',
+                                jobId: newJob.id.toString(),
+                                sourceFile: task.source_path,
+                                destinationBaseFolder: task.destination_path,
+                                keepCount: task.backup_keep_count ?? task.computer.default_backup_keep_count ?? 3,
+                                retryAttempts: task.retry_attempts ?? task.computer.default_retry_attempts ?? 3,
+                                retryDelay: task.retry_delay_seconds ?? task.computer.default_retry_delay_seconds ?? 5,
+                                folderPrefix: task.folder_prefix ?? 'backup_',
+                                timestampFormat: task.timestamp_format ?? '%Y%m%d_%H%M%S',
+                                discordWebhookUrl: task.discord_webhook_url ?? null,
+                                notificationOnSuccess: task.notification_on_success ?? null,
+                                notificationOnFailure: task.notification_on_failure ?? null,
+                            };
+                            sendCommandToAgent(task.computer_id.toString(), command);
+                            console.log(`   -> Sent command to online agent (Job ${newJob.id})`);
+                        } else {
+                            console.log(`   -> Agent offline. Job ${newJob.id} queued for Task ${task.id}`);
+                        }
                     }
                 } catch (err) {
                     console.error(`Invalid cron expression for Task ID ${task.id}: "${task.schedule}"`);

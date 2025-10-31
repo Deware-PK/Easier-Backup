@@ -34,7 +34,6 @@ export function initializeWebSocket(server: import("http").Server) {
     }
 
     const computerId = await authenticateAgent(req);
-
     if (!computerId) {
       console.log("WebSocket connection rejected: Invalid token.");
       ws.close(1008, "Invalid authentication token");
@@ -46,6 +45,9 @@ export function initializeWebSocket(server: import("http").Server) {
 
     activeConnections.set(computerIdStr, ws);
     await updateComputerStatus(computerId, "online");
+
+    // --- ADDED: Process queued jobs when agent comes online ---
+    await processQueuedJobs(computerIdStr);
 
     const timeoutId = setTimeout(() => {
       console.log(`Heartbeat timeout for Computer ID ${computerIdStr}`);
@@ -229,4 +231,84 @@ export function sendCommandToAgent(
   }
   console.warn(`Could not send command: Agent ${computerId} is not connected.`);
   return false;
+}
+
+/**
+ * ADDED: Process all queued jobs for a computer when it comes online
+ */
+async function processQueuedJobs(computerId: string) {
+  try {
+    const queuedJobs = await prisma.backup_jobs.findMany({
+      where: {
+        status: 'queued',
+        task: {
+          computer_id: BigInt(computerId)
+        }
+      },
+      include: {
+        task: {
+          include: {
+            computer: {
+              select: {
+                default_backup_keep_count: true,
+                default_retry_attempts: true,
+                default_retry_delay_seconds: true
+              }
+            }
+          }
+        }
+      },
+      orderBy: { started_at: 'asc' } // Process oldest first
+    });
+
+    if (queuedJobs.length === 0) {
+      console.log(`   -> No queued jobs for Computer ID ${computerId}`);
+      return;
+    }
+
+    console.log(`   -> Found ${queuedJobs.length} queued job(s) for Computer ID ${computerId}`);
+
+    for (const job of queuedJobs) {
+      // Update job status to 'running'
+      await prisma.backup_jobs.update({
+        where: { id: job.id },
+        data: { status: 'running' }
+      });
+
+      // Send command
+      const task = job.task;
+      const command = {
+        action: 'start-backup',
+        jobId: job.id.toString(),
+        sourceFile: task.source_path,
+        destinationBaseFolder: task.destination_path,
+        keepCount: task.backup_keep_count ?? task.computer.default_backup_keep_count ?? 3,
+        retryAttempts: task.retry_attempts ?? task.computer.default_retry_attempts ?? 3,
+        retryDelay: task.retry_delay_seconds ?? task.computer.default_retry_delay_seconds ?? 5,
+        folderPrefix: task.folder_prefix ?? 'backup_',
+        timestampFormat: task.timestamp_format ?? '%Y%m%d_%H%M%S',
+        discordWebhookUrl: task.discord_webhook_url ?? null,
+        notificationOnSuccess: task.notification_on_success ?? null,
+        notificationOnFailure: task.notification_on_failure ?? null,
+      };
+
+      const sent = sendCommandToAgent(computerId, command);
+      if (sent) {
+        console.log(`   -> Processed queued job ${job.id} for Task ${task.id}`);
+      } else {
+        // If send fails (shouldn't happen as we just connected), mark as failed
+        await prisma.backup_jobs.update({
+          where: { id: job.id },
+          data: {
+            status: 'failed',
+            completed_at: new Date(),
+            details: 'Failed to send command after agent reconnected'
+          }
+        });
+        console.error(`   -> Failed to process queued job ${job.id}`);
+      }
+    }
+  } catch (error) {
+    console.error(`Error processing queued jobs for Computer ID ${computerId}:`, error);
+  }
 }

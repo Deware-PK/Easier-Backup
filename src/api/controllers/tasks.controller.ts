@@ -3,6 +3,7 @@ import { type AuthRequest } from '../../middlewares/auth.middleware.js';
 import prisma from '../../db.js';
 import { logAudit } from '../../middlewares/audit.middleware.js';
 import { sanitizePath } from '../../utils/pathValidator.js';
+import { sendCommandToAgent } from '../../services/websocket.service.js';
 
 function isValidDiscordWebhook(url: string | null): boolean {
   if (!url) return true; // null is OK
@@ -99,6 +100,122 @@ export const createTask = async (req: AuthRequest, res: Response) => {
         res.status(500).json({ message: 'Internal Server Error' });
     }
 }
+
+/**
+ * @description Trigger a task to run immediately via WebSocket
+ * @route POST /api/v1/tasks/:taskId/start-now
+ */
+export const startTaskNow = async (req: AuthRequest, res: Response) => {
+    const { taskId } = req.params;
+    const userId = req.user?.sub;
+
+    if (!userId) {
+        return res.status(401).json({ message: 'User not found' });
+    }
+
+    try {
+        // 1. Fetch task and verify ownership
+        const task = await prisma.tasks.findFirst({
+            where: {
+                id: BigInt(taskId),
+                computer: {
+                    user_id: BigInt(userId),
+                }
+            },
+            include: {
+                computer: true
+            }
+        });
+
+        if (!task) {
+            return res.status(403).json({ message: "You don't have permission or task not found!" });
+        }
+
+        // 2. Check if agent is online (computerId from task)
+        const computerId = task.computer_id.toString();
+
+        // 3. Create backup_jobs record (status: 'success')
+        const newJob = await prisma.backup_jobs.create({
+            data: {
+                task_id: task.id,
+                status: 'success',
+                started_at: new Date(),
+            }
+        });
+
+        const jobId = newJob.id.toString();
+
+        // 4. Prepare command payload
+        const command = {
+            action: 'start-backup',
+            jobId,
+            taskId: task.id.toString(),
+            sourceFile: task.source_path,
+            destinationBaseFolder: task.destination_path,
+            keepCount: task.backup_keep_count ?? 3,
+            retryAttempts: task.retry_attempts ?? 3, 
+            retryDelay: task.retry_delay_seconds ?? 60,
+            timestampFormat: task.timestamp_format ?? undefined,
+            discordWebhookUrl: task.discord_webhook_url ?? undefined,
+            notificationOnSuccess: task.notification_on_success ?? undefined,
+            notificationOnFailure: task.notification_on_failure ?? undefined,
+        };
+
+        // 5. Send command via WebSocket
+        const sent = sendCommandToAgent(computerId, command);
+
+        if (!sent) {
+            // Agent offline - update job status
+            await prisma.backup_jobs.update({
+                where: { id: newJob.id },
+                data: {
+                    status: 'failed',
+                    details: 'Agent is offline or not connected',
+                    completed_at: new Date(),
+                }
+            });
+
+            await logAudit(req, {
+                action: 'start_task_now',
+                resource: 'tasks',
+                resourceId: taskId,
+                status: 'failed',
+                details: 'Agent offline'
+            });
+
+            return res.status(503).json({ 
+                message: 'Agent is offline. Cannot start task now.',
+                jobId 
+            });
+        }
+
+        // 6. Success - command sent
+        await logAudit(req, {
+            action: 'start_task_now',
+            resource: 'tasks',
+            resourceId: taskId,
+            status: 'success',
+            details: `Job ID: ${jobId}`
+        });
+
+        res.status(200).json({
+            message: 'Task started successfully',
+            jobId,
+            taskId: task.id.toString(),
+            taskName: task.name,
+        });
+
+    } catch (error) {
+        await logAudit(req, {
+            action: 'start_task_now',
+            resource: 'tasks',
+            resourceId: taskId,
+            status: 'failed'
+        });
+        console.error("Error starting task now:", error);
+        res.status(500).json({ message: 'Internal Server Error' });
+    }
+};
 
 /**
  * @description Get all tasks for a specific computer

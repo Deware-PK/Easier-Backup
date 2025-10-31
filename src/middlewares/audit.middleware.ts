@@ -5,7 +5,7 @@ import prisma from '../db.js';
 type AuditAction = 
   | 'login' | 'register' | 'logout'
   | 'create_computer' | 'update_computer' | 'delete_computer' | 'register_computer'
-  | 'create_task' | 'update_task' | 'delete_task'
+  | 'create_task' | 'update_task' | 'delete_task' | 'start_task_now'
   | 'view_audit_logs'
   | 'generate_recovery_codes' | 'reset_password'
   | 'request_agent_reg_token';

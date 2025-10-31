@@ -2,9 +2,9 @@ import path from 'path';
 
 /**
  * Validate and sanitize file/directory paths to prevent path traversal attacks
- * STRICT MODE: Only accepts absolute paths - rejects all relative paths
+ * Platform-agnostic: accepts both Windows (C:\...) and POSIX (/home/...) absolute paths
  * @param inputPath - User-provided path
- * @returns Canonicalized absolute path or null if unsafe
+ * @returns Canonicalized path or null if unsafe
  */
 export function sanitizePath(inputPath: string): string | null {
   if (!inputPath || typeof inputPath !== 'string') return null;
@@ -17,29 +17,27 @@ export function sanitizePath(inputPath: string): string | null {
   if (inputPath.includes('./') || inputPath.includes('.\\')) return null;
 
   let canonicalPath: string;
+  let isWindowsPath = false;
+  let isPosixPath = false;
 
   try {
-    // 3. Platform-aware normalization
-    if (process.platform === 'win32') {
-      // Windows: convert forward slashes to backslashes
+    // 3. Detect path type (Windows vs POSIX) independent of server platform
+    const winMatch = /^[A-Z]:\\/i.test(inputPath);
+    const posixMatch = inputPath.startsWith('/');
+
+    if (winMatch) {
+      // Windows path detected (e.g., C:\Users\...)
+      isWindowsPath = true;
       const normalized = inputPath.replace(/\//g, '\\');
-      
-      // STRICT: Reject if not starting with drive letter
-      if (!/^[A-Z]:\\/i.test(normalized)) {
-        return null; // Must be absolute Windows path like C:\...
-      }
-      
       canonicalPath = path.win32.normalize(normalized);
-    } else {
-      // POSIX: convert backslashes to forward slashes
+    } else if (posixMatch) {
+      // POSIX path detected (e.g., /home/...)
+      isPosixPath = true;
       const normalized = inputPath.replace(/\\/g, '/');
-      
-      // STRICT: Reject if not starting with /
-      if (!normalized.startsWith('/')) {
-        return null; // Must be absolute POSIX path like /home/...
-      }
-      
       canonicalPath = path.posix.normalize(normalized);
+    } else {
+      // Neither Windows nor POSIX absolute path
+      return null;
     }
   } catch {
     return null;
@@ -48,7 +46,7 @@ export function sanitizePath(inputPath: string): string | null {
   // 4. After normalization, double-check no traversal markers remain
   if (canonicalPath.includes('..')) return null;
 
-  // 5. Block critical system directories (minimal blacklist)
+  // 5. Block critical system directories (platform-specific)
   const forbiddenPatterns = [
     // Linux/Unix critical paths
     '/etc/shadow', '/etc/passwd', '/etc/sudoers',
@@ -64,13 +62,16 @@ export function sanitizePath(inputPath: string): string | null {
 
   const lowerPath = canonicalPath.toLowerCase();
   for (const forbidden of forbiddenPatterns) {
-    const normalizedForbidden = (process.platform === 'win32' 
+    // Normalize forbidden pattern to match path type
+    const normalizedForbidden = isWindowsPath 
       ? forbidden.replace(/\//g, '\\') 
-      : forbidden.replace(/\\/g, '/')
-    ).toLowerCase();
+      : forbidden.replace(/\\/g, '/');
+    
+    const lowerForbidden = normalizedForbidden.toLowerCase();
     
     // Check exact match or starts with forbidden path
-    if (lowerPath === normalizedForbidden || lowerPath.startsWith(normalizedForbidden + path.sep)) {
+    const separator = isWindowsPath ? '\\' : '/';
+    if (lowerPath === lowerForbidden || lowerPath.startsWith(lowerForbidden + separator)) {
       return null;
     }
   }

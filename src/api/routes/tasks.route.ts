@@ -1,7 +1,7 @@
 import { Router } from "express";
-import { createTask, getTasksForComputer, updateTask, deleteTask, getTasksForUser, getTotalTasksForUser } from "../controllers/tasks.controller.js";
+import { createTask, getTasksForComputer, updateTask, deleteTask, getTasksForUser, getTotalTasksForUser, startTaskNow } from "../controllers/tasks.controller.js";
 import { protect } from "../../middlewares/auth.middleware.js";
-import { validateBody, v } from "../../middlewares/validate.middleware.js";
+import { validateBody, validateEmptyBody, v } from "../../middlewares/validate.middleware.js";
 
 const router = Router();
 
@@ -22,6 +22,8 @@ router.post('/', protect, validateBody({
   notification_on_success: v.optionalString(0, 1000),
   notification_on_failure: v.optionalString(0, 1000),
 }), createTask);
+
+router.post('/:taskId/start-now', protect, validateEmptyBody(), startTaskNow);
 
 router.get('/user', protect, getTasksForUser);
 router.get('/user/count', protect, getTotalTasksForUser);
