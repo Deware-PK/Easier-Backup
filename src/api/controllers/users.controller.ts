@@ -105,6 +105,14 @@ export const loginUser = async (req: Request, res: Response) => {
       path: '/',
     });
 
+    res.cookie('SESSION_USERNAME', user.username, {
+      httpOnly: false,
+      secure: true,
+      sameSite: 'none',
+      expires: expiresAtDate,
+      path: '/',
+    });
+
     await logAudit(req, { action: 'login', status: 'success', details: `User: ${user.username}` });
 
     res.status(200).json({
@@ -134,8 +142,16 @@ export const logoutUser = async (req: AuthRequest, res: Response) => {
       path: '/',
     } as const;
 
+    const publicCookieOpts = {
+      httpOnly: false, // MARK: FIX - ต้องตรงกับตอนสร้าง
+      secure: isProd,
+      sameSite: isProd ? 'none' : 'lax',
+      path: '/',
+    } as const;
+
     res.clearCookie('SESSION_TOKEN__DO_NOT_SHARE', cookieOpts);
     res.clearCookie('SESSION_EXPIRES_AT', cookieOpts);
+    res.clearCookie('SESSION_USERNAME', publicCookieOpts);
 
     if (req.user) {
       await logAudit(req, { action: 'logout', status: 'success' });
