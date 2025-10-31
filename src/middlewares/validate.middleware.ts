@@ -1,4 +1,5 @@
 import { type Request, type Response, type NextFunction } from 'express';
+import { sanitizePath } from '../utils/pathValidator.js';
 
 type Rule = (v: any) => string | null;
 
@@ -57,6 +58,14 @@ export const v = {
     (v) => {
       if (v === undefined || v === null) return null;
       return (typeof v === 'boolean') ? null : 'must be boolean (true or false)';
+    },
+
+  // Safe path validator (path traversal)
+  safePath: (): Rule =>
+    (v) => {
+      if (typeof v !== 'string') return 'must be a string';
+      const sanitized = sanitizePath(v);
+      return sanitized !== null ? null : 'invalid or unsafe path (path traversal detected)';
     },
 };
 

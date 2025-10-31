@@ -9,8 +9,8 @@ const router = Router();
 router.post('/', protect, validateBody({
   computer_id: v.requiredString(1, 50),
   name: v.requiredString(1, 100),
-  source_path: v.requiredString(1, 1000),
-  destination_path: v.requiredString(1, 1000),
+  source_path: v.safePath(),
+  destination_path: v.safePath(),
   schedule: v.requiredString(5, 50),
   is_active: v.optionalOneOf(['true', 'false']),
   backup_keep_count: v.optionalIntIn(1, 100),
@@ -30,8 +30,8 @@ router.get('/computer/:computerId', protect, getTasksForComputer);
 // Validation สำหรับ update task
 router.put('/:taskId', protect, validateBody({
   name: v.requiredString(1, 100),
-  source_path: v.requiredString(1, 1000),
-  destination_path: v.requiredString(1, 1000),
+  source_path: v.safePath(),
+  destination_path: v.safePath(),
   schedule: v.requiredString(5, 50),
   is_active: v.optionalOneOf(['true', 'false']),
   backup_keep_count: v.optionalIntIn(1, 100),

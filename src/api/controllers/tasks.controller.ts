@@ -2,6 +2,7 @@ import { type Response } from "express";
 import { type AuthRequest } from '../../middlewares/auth.middleware.js';
 import prisma from '../../db.js';
 import { logAudit } from '../../middlewares/audit.middleware.js';
+import { sanitizePath } from '../../utils/pathValidator.js';
 
 function isValidDiscordWebhook(url: string | null): boolean {
   if (!url) return true; // null is OK
@@ -28,6 +29,17 @@ export const createTask = async (req: AuthRequest, res: Response) => {
         return res.status(400).json({ message: 'Invalid Discord webhook URL.' });
     }
 
+    const safeSrc = sanitizePath(source_path);
+    const safeDest = sanitizePath(destination_path);
+    if (!safeSrc || !safeDest) {
+        await logAudit(req, { 
+            action: 'create_task', 
+            status: 'failed', 
+            details: `Unsafe path detected: src=${source_path}, dest=${destination_path}` 
+        });
+        return res.status(400).json({ message: 'Invalid or unsafe file paths (path traversal detected).' });
+    }
+
     const userId = req.user?.sub;
 
     if (!computer_id || !name || !source_path || !destination_path || !schedule) {
@@ -50,8 +62,8 @@ export const createTask = async (req: AuthRequest, res: Response) => {
             data: {
                 computer_id: BigInt(computer_id),
                 name,
-                source_path,
-                destination_path,
+                source_path: safeSrc,
+                destination_path: safeDest, 
                 schedule,
                 is_active,
                 backup_keep_count: backup_keep_count ? parseInt(backup_keep_count) : undefined,
@@ -145,6 +157,19 @@ export const updateTask = async (req: AuthRequest, res: Response) => {
         return res.status(400).json({ message: 'Invalid Discord webhook URL.' });
     }
     
+    const safeSrc = sanitizePath(source_path);
+    const safeDest = sanitizePath(destination_path);
+    if (!safeSrc || !safeDest) {
+        await logAudit(req, { 
+            action: 'update_task', 
+            resource: 'tasks', 
+            resourceId: taskId, 
+            status: 'failed', 
+            details: `Unsafe path detected: src=${source_path}, dest=${destination_path}` 
+        });
+        return res.status(400).json({ message: 'Invalid or unsafe file paths (path traversal detected).' });
+    }
+
     try {
         const task = await prisma.tasks.findFirst({
             where: {
@@ -165,8 +190,8 @@ export const updateTask = async (req: AuthRequest, res: Response) => {
             },
             data: {
                 name,
-                source_path,
-                destination_path,
+                source_path: safeSrc,
+                destination_path: safeDest, 
                 schedule,
                 is_active,
                 backup_keep_count: backup_keep_count !== undefined ? (backup_keep_count === null ? null : parseInt(backup_keep_count)) : undefined,
