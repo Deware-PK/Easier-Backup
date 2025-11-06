@@ -89,29 +89,25 @@ export const loginUser = async (req: Request, res: Response) => {
     const expiresAtTimestamp = expiresAtDate.getTime();
     const isProd = process.env.NODE_ENV === 'production';
 
-    res.cookie('SESSION_TOKEN__DO_NOT_SHARE', token, {
-      httpOnly: true, // ป้องกัน JavaScript เข้าถึง
-      secure: isProd, // ใช้ HTTPS เท่านั้นใน Production
-      sameSite: isProd ? 'none' : 'lax', // ป้องกัน CSRF เบื้องต้น
-      expires: expiresAtDate, // กำหนดวันหมดอายุ
-      path: '/', // ใช้ได้ทั้งเว็บ
-    });
+    const authCookieOpts = {
+      httpOnly: true,
+      secure: isProd, // https only in production
+      sameSite: isProd ? 'none' : 'lax',
+      expires: expiresAtDate,
+      path: '/',
+    } as const;
 
-    res.cookie('SESSION_EXPIRES_AT', String(expiresAtTimestamp), {
-      httpOnly: true, // **แนะนำให้เป็น true และปรับ Frontend**
+    const publicCookieOpts = {
+      httpOnly: false,
       secure: isProd,
       sameSite: isProd ? 'none' : 'lax',
       expires: expiresAtDate,
       path: '/',
-    });
+    } as const;
 
-    res.cookie('SESSION_USERNAME', user.username, {
-      httpOnly: false,
-      secure: true,
-      sameSite: 'none',
-      expires: expiresAtDate,
-      path: '/',
-    });
+    res.cookie('SESSION_TOKEN__DO_NOT_SHARE', token, authCookieOpts);
+    res.cookie('SESSION_EXPIRES_AT', String(expiresAtTimestamp), authCookieOpts);
+    res.cookie('SESSION_USERNAME', user.username, publicCookieOpts);
 
     await logAudit(req, { action: 'login', status: 'success', details: `User: ${user.username}` });
 

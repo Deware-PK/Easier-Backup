@@ -86,7 +86,7 @@ app.use(apiVersion, (req, res, next) => {
 // API Router
 app.use(apiVersion, apiRouter);
 
-server.listen(Number(port), '127.0.0.1', () => {
+server.listen(Number(port), '0.0.0.0', () => {
     console.log(`Server has been started! (HTTP & WebSocket)`)
     startSyncedScheduler();
 });

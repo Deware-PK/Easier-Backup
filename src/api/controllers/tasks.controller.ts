@@ -155,6 +155,7 @@ export const startTaskNow = async (req: AuthRequest, res: Response) => {
             keepCount: task.backup_keep_count ?? 3,
             retryAttempts: task.retry_attempts ?? 3, 
             retryDelay: task.retry_delay_seconds ?? 60,
+            folderPrefix: task.folder_prefix ?? undefined,
             timestampFormat: task.timestamp_format ?? undefined,
             discordWebhookUrl: task.discord_webhook_url ?? undefined,
             notificationOnSuccess: task.notification_on_success ?? undefined,
